@@ -1,0 +1,115 @@
+"""
+鲁棒性测试模块 - 添加噪声测试算法稳定性
+"""
+
+import numpy as np
+import pandas as pd
+from sklearn.metrics import accuracy_score
+import warnings
+warnings.filterwarnings('ignore')
+
+
+class RobustnessTester:
+    """鲁棒性测试器"""
+    
+    def __init__(self, random_state=42):
+        self.random_state = random_state
+        self.results = None
+    
+    def add_noise(self, X, noise_type='gaussian', noise_level=0.1):
+        """
+        向数据添加噪声
+        
+        Args:
+            X: 输入数据
+            noise_type: 噪声类型 ('gaussian', 'laplace', 'uniform')
+            noise_level: 噪声强度（标准差或范围）
+            
+        Returns:
+            X_noisy: 添加噪声后的数据
+        """
+        np.random.seed(self.random_state)
+        noise = np.zeros_like(X)
+        
+        if noise_type == 'gaussian':
+            noise = np.random.normal(0, noise_level, X.shape)
+        elif noise_type == 'laplace':
+            noise = np.random.laplace(0, noise_level, X.shape)
+        elif noise_type == 'uniform':
+            noise = np.random.uniform(-noise_level, noise_level, X.shape)
+        else:
+            raise ValueError(f"不支持的噪声类型: {noise_type}")
+        
+        return X + noise
+    
+    def test_robustness(self, models, X_test, y_test, 
+                        noise_types=None, noise_levels=None):
+        """
+        测试各模型的鲁棒性
+        
+        Args:
+            models: 模型字典
+            X_test: 测试特征
+            y_test: 测试标签
+            noise_types: 噪声类型列表
+            noise_levels: 噪声强度列表
+            
+        Returns:
+            DataFrame: 鲁棒性测试结果
+        """
+        if noise_types is None:
+            noise_types = ['gaussian', 'laplace']
+        if noise_levels is None:
+            noise_levels = [0.05, 0.1, 0.2, 0.3]
+        
+        print("\n" + "=" * 60)
+        print("开始鲁棒性测试")
+        print("=" * 60)
+        
+        results = {}
+        
+        # 基准准确率（无噪声）
+        base_acc = {}
+        for name, model in models.items():
+            y_pred = model.predict(X_test)
+            base_acc[name] = accuracy_score(y_test, y_pred)
+        
+        for noise_type in noise_types:
+            for noise_level in noise_levels:
+                key = f"{noise_type}_{noise_level:.2f}"
+                results[key] = {}
+                
+                X_noisy = self.add_noise(X_test, noise_type, noise_level)
+                
+                for name, model in models.items():
+                    y_pred = model.predict(X_noisy)
+                    acc = accuracy_score(y_test, y_pred)
+                    results[key][name] = acc
+                    
+                    # 计算精度下降
+                    drop = base_acc[name] - acc
+                    print(f"{name} | {key} | Acc: {acc:.4f} | 下降: {drop:.4f}")
+        
+        # 转换为DataFrame
+        self.results = pd.DataFrame(results).T
+        self.results['noise_type'] = [r.split('_')[0] for r in self.results.index]
+        self.results['noise_level'] = [float(r.split('_')[1]) for r in self.results.index]
+        
+        return self.results
+    
+    def get_summary(self):
+        """获取鲁棒性测试摘要"""
+        if self.results is None:
+            return None
+        
+        summary = {}
+        for col in self.results.columns:
+            if col not in ['noise_type', 'noise_level']:
+                summary[col] = {
+                    'mean': self.results[col].mean(),
+                    'std': self.results[col].std(),
+                    'min': self.results[col].min(),
+                    'max': self.results[col].max()
+                }
+        
+        return pd.DataFrame(summary).T
