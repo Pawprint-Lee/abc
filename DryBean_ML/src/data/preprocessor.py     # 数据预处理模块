@@ -1,0 +1,155 @@
+"""
+数据预处理模块 - 数据清洗、特征工程
+"""
+
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from imblearn.combine import SMOTETomek
+from imblearn.over_sampling import ADASYN, SMOTE
+import warnings
+warnings.filterwarnings('ignore')
+
+
+class DataPreprocessor:
+    """数据预处理器"""
+    
+    def __init__(self, random_state=42):
+        """
+        初始化预处理器
+        
+        Args:
+            random_state: 随机种子
+        """
+        self.random_state = random_state
+        self.scaler = None
+        self.label_encoder = None
+        self.pca = None
+        self.feature_columns = None
+        
+    def fit(self, train_df, feature_columns, target_column='Class'):
+        """
+        拟合预处理器（从训练集学习参数）
+        
+        Args:
+            train_df: 训练数据DataFrame
+            feature_columns: 特征列名列表
+            target_column: 目标列名
+        """
+        self.feature_columns = feature_columns
+        
+        # 编码标签
+        self.label_encoder = LabelEncoder()
+        self.label_encoder.fit(train_df[target_column])
+        
+        # 提取特征和标签
+        X_train = train_df[feature_columns].copy()
+        y_train = train_df[target_column].copy()
+        
+        # 异常值处理（IQR）
+        X_train_clean, clean_mask = self._remove_outliers_iqr(X_train)
+        y_train_clean = y_train[clean_mask].copy()
+        
+        # 类别不平衡处理（SMOTE-Tomek）
+        X_train_balanced, y_train_balanced = self._balance_data(
+            X_train_clean, self.label_encoder.transform(y_train_clean)
+        )
+        
+        # 特征缩放
+        self.scaler = StandardScaler()
+        X_train_scaled = self.scaler.fit_transform(X_train_balanced)
+        
+        return X_train_scaled, y_train_balanced
+    
+    def transform(self, df):
+        """
+        转换数据
+        
+        Args:
+            df: 待转换的数据DataFrame
+            
+        Returns:
+            X: 处理后的特征数组
+            y: 处理后的标签数组（如果有Class列）
+        """
+        X = df[self.feature_columns].copy()
+        X_scaled = self.scaler.transform(X)
+        
+        if 'Class' in df.columns:
+            y = self.label_encoder.transform(df['Class'])
+            return X_scaled, y
+        else:
+            return X_scaled
+    
+    def fit_transform(self, train_df, val_df, test_df):
+        """
+        一站式数据处理
+        
+        Returns:
+            dict: 包含处理后的训练集、验证集、测试集
+        """
+        X_train, y_train = self.fit(train_df, self.feature_columns)
+        X_val, y_val = self.transform(val_df)
+        X_test, y_test = self.transform(test_df)
+        
+        return {
+            'X_train': X_train,
+            'y_train': y_train,
+            'X_val': X_val,
+            'y_val': y_val,
+            'X_test': X_test,
+            'y_test': y_test,
+            'label_encoder': self.label_encoder,
+            'scaler': self.scaler
+        }
+    
+    def _remove_outliers_iqr(self, df, multiplier=1.5):
+        """使用IQR方法去除异常值"""
+        Q1 = df.quantile(0.25)
+        Q3 = df.quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - multiplier * IQR
+        upper_bound = Q3 + multiplier * IQR
+        
+        mask = ((df >= lower_bound) & (df <= upper_bound)).all(axis=1)
+        return df[mask], mask
+    
+    def _balance_data(self, X, y, method='smote_tomek'):
+        """处理类别不平衡"""
+        if method == 'smote_tomek':
+            sampler = SMOTETomek(random_state=self.random_state)
+        elif method == 'adasyn':
+            sampler = ADASYN(random_state=self.random_state)
+        else:
+            sampler = SMOTE(random_state=self.random_state)
+        
+        X_balanced, y_balanced = sampler.fit_resample(X, y)
+        return X_balanced, y_balanced
+    
+    def get_processing_summary(self):
+        """获取数据处理摘要"""
+        summary = {
+            'missing_value_handling': '无缺失值，直接使用',
+            'outlier_detection': 'IQR方法 (1.5倍)',
+            'imbalance_handling': 'SMOTE-Tomek',
+            'feature_scaling': 'StandardScaler (标准化)',
+            'label_encoding': 'LabelEncoder'
+        }
+        return summary
+
+
+if __name__ == "__main__":
+    from loader import DataLoader
+    
+    loader = DataLoader()
+    data = loader.load_data()
+    
+    preprocessor = DataPreprocessor()
+    result = preprocessor.fit_transform(
+        data['train'], data['val'], data['test']
+    )
+    
+    print(f"处理后训练集: {result['X_train'].shape}")
+    print(f"处理后验证集: {result['X_val'].shape}")
+    print(f"处理后测试集: {result['X_test'].shape}")
+    print(f"类别数: {len(result['label_encoder'].classes_)}")
