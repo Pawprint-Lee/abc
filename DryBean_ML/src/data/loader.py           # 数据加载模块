@@ -1,0 +1,92 @@
+"""
+数据加载模块 - 加载训练集、验证集、测试集
+"""
+
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import sys
+import os
+
+# 添加项目根目录到路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+class DataLoader:
+    """数据加载器"""
+    
+    # Dry Bean Dataset 特征名称
+    FEATURE_NAMES = [
+        'Area', 'Perimeter', 'MajorAxisLength', 'MinorAxisLength',
+        'AspectRatio', 'Eccentricity', 'ConvexArea', 'EquivalentDiameter',
+        'Extent', 'Solidity', 'Roundness', 'Compactness',
+        'ShapeFactor1', 'ShapeFactor2', 'ShapeFactor3', 'ShapeFactor4'
+    ]
+    
+    CLASS_NAMES = ['Seker', 'Barbunya', 'Bombay', 'Cali', 'Dermosan', 'Horoz', 'Sira']
+    
+    def __init__(self, data_dir='data'):
+        """
+        初始化数据加载器
+        
+        Args:
+            data_dir: 数据目录路径
+        """
+        self.data_dir = Path(data_dir)
+        
+    def load_data(self, train_file='train.csv', val_file='val.csv', test_file='test.csv'):
+        """
+        加载三个数据集
+        
+        Returns:
+            dict: 包含训练集、验证集、测试集的字典
+        """
+        # 加载数据
+        train_path = self.data_dir / train_file
+        val_path = self.data_dir / val_file
+        test_path = self.data_dir / test_file
+        
+        if not train_path.exists():
+            raise FileNotFoundError(f"训练集文件不存在: {train_path}")
+        if not val_path.exists():
+            raise FileNotFoundError(f"验证集文件不存在: {val_path}")
+        if not test_path.exists():
+            raise FileNotFoundError(f"测试集文件不存在: {test_path}")
+        
+        train_df = pd.read_csv(train_path)
+        val_df = pd.read_csv(val_path)
+        test_df = pd.read_csv(test_path)
+        
+        # 验证列名
+        expected_cols = self.FEATURE_NAMES + ['Class']
+        for df, name in [(train_df, '训练集'), (val_df, '验证集'), (test_df, '测试集')]:
+            missing_cols = set(expected_cols) - set(df.columns)
+            if missing_cols:
+                raise ValueError(f"{name}缺少列: {missing_cols}")
+        
+        return {
+            'train': train_df,
+            'val': val_df,
+            'test': test_df,
+            'features': self.FEATURE_NAMES,
+            'classes': self.CLASS_NAMES
+        }
+    
+    def get_feature_names(self):
+        """获取特征名称列表"""
+        return self.FEATURE_NAMES.copy()
+    
+    def get_class_names(self):
+        """获取类别名称列表"""
+        return self.CLASS_NAMES.copy()
+
+
+if __name__ == "__main__":
+    # 测试数据加载
+    loader = DataLoader()
+    data = loader.load_data()
+    print(f"训练集: {data['train'].shape}")
+    print(f"验证集: {data['val'].shape}")
+    print(f"测试集: {data['test'].shape}")
+    print(f"特征: {data['features']}")
+    print(f"类别: {data['classes']}")
