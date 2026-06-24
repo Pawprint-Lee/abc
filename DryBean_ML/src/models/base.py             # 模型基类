@@ -1,0 +1,71 @@
+"""
+模型基类 - 所有算法的统一接口
+"""
+
+from abc import ABC, abstractmethod
+import numpy as np
+import time
+
+
+class BaseModel(ABC):
+    """所有模型的基类"""
+    
+    def __init__(self, name, random_state=42):
+        """
+        初始化模型
+        
+        Args:
+            name: 模型名称
+            random_state: 随机种子
+        """
+        self.name = name
+        self.random_state = random_state
+        self.model = None
+        self.training_time = None
+        self.is_trained = False
+    
+    @abstractmethod
+    def build_model(self, **kwargs):
+        """构建模型（由子类实现）"""
+        pass
+    
+    @abstractmethod
+    def train(self, X_train, y_train, X_val=None, y_val=None, **kwargs):
+        """训练模型（由子类实现）"""
+        pass
+    
+    @abstractmethod
+    def predict(self, X):
+        """预测（由子类实现）"""
+        pass
+    
+    def predict_proba(self, X):
+        """预测概率（可选）"""
+        if hasattr(self.model, 'predict_proba'):
+            return self.model.predict_proba(X)
+        return None
+    
+    def get_training_time(self):
+        """获取训练时间"""
+        return self.training_time
+    
+    def get_name(self):
+        """获取模型名称"""
+        return self.name
+    
+    def is_trained_model(self):
+        """检查模型是否已训练"""
+        return self.is_trained
+    
+    def save_model(self, path):
+        """保存模型"""
+        import pickle
+        with open(path, 'wb') as f:
+            pickle.dump(self.model, f)
+    
+    def load_model(self, path):
+        """加载模型"""
+        import pickle
+        with open(path, 'rb') as f:
+            self.model = pickle.load(f)
+        self.is_trained = True
