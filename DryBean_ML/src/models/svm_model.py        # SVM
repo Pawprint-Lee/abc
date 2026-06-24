@@ -1,0 +1,61 @@
+"""
+SVM模型
+"""
+
+from sklearn.svm import SVC
+import numpy as np
+import time
+from .base import BaseModel
+
+
+class SVMModel(BaseModel):
+    """SVM分类器"""
+    
+    def __init__(self, random_state=42):
+        super().__init__('SVM', random_state)
+    
+    def build_model(self, kernel='rbf', C=1.0, gamma='scale', 
+                    degree=3, **kwargs):
+        """构建SVM模型"""
+        self.model = SVC(
+            kernel=kernel,
+            C=C,
+            gamma=gamma,
+            degree=degree,
+            random_state=self.random_state,
+            probability=True,
+            **kwargs
+        )
+        return self.model
+    
+    def train(self, X_train, y_train, X_val=None, y_val=None, **kwargs):
+        """训练SVM"""
+        if self.model is None:
+            self.build_model(**kwargs)
+        
+        start_time = time.time()
+        self.model.fit(X_train, y_train)
+        self.training_time = time.time() - start_time
+        self.is_trained = True
+        
+        return self.model
+    
+    def predict(self, X):
+        """预测"""
+        if not self.is_trained:
+            raise ValueError("模型尚未训练")
+        return self.model.predict(X)
+    
+    def predict_proba(self, X):
+        """预测概率"""
+        if not self.is_trained:
+            raise ValueError("模型尚未训练")
+        return self.model.predict_proba(X)
+    
+    def get_params(self):
+        """获取模型参数"""
+        return {
+            'kernel': self.model.kernel if self.model else 'rbf',
+            'C': self.model.C if self.model else 1.0,
+            'gamma': self.model.gamma if self.model else 'scale'
+        }
